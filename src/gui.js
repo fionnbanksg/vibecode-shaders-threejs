@@ -21,6 +21,7 @@ export function createGui({ uniforms, renderer }) {
 
   const waves = gui.addFolder('Waves');
   waves.add(uniforms.uSteepness, 'value', 0, 1, 0.01).name('steepness');
+  waves.add(uniforms.uRippleStrength, 'value', 0, 3, 0.01).name('ripple strength');
 
   const water = gui.addFolder('Water');
   addColor(water, uniforms.uWaterColor, 'deep colour');

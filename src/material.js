@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import waterVert from './shaders/basic.vert.glsl?raw';
 import waterFrag from './shaders/basic.frag.glsl?raw';
 import skyLib from './shaders/lib/sky.glsl?raw';
+import noiseLib from './shaders/lib/noise.glsl?raw';
 import skyVert from './shaders/sky.vert.glsl?raw';
 import skyFrag from './shaders/sky.frag.glsl?raw';
 
@@ -15,23 +16,28 @@ export const uniforms = {
   uWaterColor: { value: new THREE.Color(0x0a4a5c) },
   uScatterColor: { value: new THREE.Color(0x2fd0b8) },
   uSssStrength: { value: 3.0 },
+  uRippleStrength: { value: 1.0 },
 };
 
-// Keep the current source strings so hot reload can rebuild either material.
-const src = { waterVert, waterFrag, skyLib, skyVert, skyFrag };
+// Current source strings, kept so hot reload can rebuild either material.
+const src = { waterVert, waterFrag, skyLib, noiseLib, skyVert, skyFrag };
+
+// Libraries first, then the shader that uses them.
+const waterFragment = () => src.skyLib + '\n' + src.noiseLib + '\n' + src.waterFrag;
+const skyFragment = () => src.skyLib + '\n' + src.skyFrag;
 
 export const material = new THREE.ShaderMaterial({
   vertexShader: src.waterVert,
-  fragmentShader: src.skyLib + '\n' + src.waterFrag,   // library first, then the shader that uses it
+  fragmentShader: waterFragment(),
   uniforms,
   side: THREE.DoubleSide,
 });
 
 export const skyMaterial = new THREE.ShaderMaterial({
   vertexShader: src.skyVert,
-  fragmentShader: src.skyLib + '\n' + src.skyFrag,
+  fragmentShader: skyFragment(),
   uniforms,
-  side: THREE.BackSide,     // we're inside the sphere, so draw its inner faces
+  side: THREE.BackSide,
   depthWrite: false,
 });
 
@@ -41,21 +47,23 @@ if (import.meta.hot) {
       './shaders/basic.vert.glsl?raw',
       './shaders/basic.frag.glsl?raw',
       './shaders/lib/sky.glsl?raw',
+      './shaders/lib/noise.glsl?raw',
       './shaders/sky.vert.glsl?raw',
       './shaders/sky.frag.glsl?raw',
     ],
-    ([wv, wf, lib, sv, sf]) => {
+    ([wv, wf, sl, nl, sv, sf]) => {
       // Only the modules that changed are defined; the rest are undefined.
       if (wv) src.waterVert = wv.default;
       if (wf) src.waterFrag = wf.default;
-      if (lib) src.skyLib = lib.default;
+      if (sl) src.skyLib = sl.default;
+      if (nl) src.noiseLib = nl.default;
       if (sv) src.skyVert = sv.default;
       if (sf) src.skyFrag = sf.default;
 
       material.vertexShader = src.waterVert;
-      material.fragmentShader = src.skyLib + '\n' + src.waterFrag;
+      material.fragmentShader = waterFragment();
       skyMaterial.vertexShader = src.skyVert;
-      skyMaterial.fragmentShader = src.skyLib + '\n' + src.skyFrag;
+      skyMaterial.fragmentShader = skyFragment();
       material.needsUpdate = true;
       skyMaterial.needsUpdate = true;
     }

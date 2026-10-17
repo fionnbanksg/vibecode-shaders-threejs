@@ -13,6 +13,8 @@ const float STEEPNESS_DECAY  = 0.78;
 uniform float uSteepness;             // keep < 1.0 or the surface folds over itself   // keep < 1.0 or the surface folds over itself
 const float WIND_ANGLE       = 0.43;   // radians
 const float WIND_SPREAD      = 1.6;   // radians; 0 = all waves aligned
+const float WAVE_FADE_NEAR = 4.0;
+const float WAVE_FADE_FAR  = 8.0;
 varying float vHeight;
 float hash11(float n) {
   return fract(sin(n * 127.1) * 43758.5453);
@@ -50,7 +52,8 @@ void main() {
     float angle = WIND_ANGLE + (hash11(fi + 1.0) - 0.5) * WIND_SPREAD;
     vec2 dir = vec2(cos(angle), sin(angle));
     float wavelength = BASE_WAVELENGTH * pow(WAVELENGTH_DECAY, fi);
-    float steepness  = uSteepness * pow(STEEPNESS_DECAY, fi) / norm;
+    float fade = 1.0 - smoothstep(WAVE_FADE_NEAR * wavelength, WAVE_FADE_FAR * wavelength, length(p));
+    float steepness  = uSteepness * fade * pow(STEEPNESS_DECAY, fi) / norm;
 
     gerstner(p, dir, wavelength, steepness, offset, tangent, binormal);
   }

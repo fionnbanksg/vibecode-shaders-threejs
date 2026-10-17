@@ -16,7 +16,7 @@ export class CameraController {
     this.zoomSpeed = opts.zoomSpeed ?? 0.0015;      // log-distance per wheel unit
     this.minDistance = opts.minDistance ?? 0.5;
     this.maxDistance = opts.maxDistance ?? 50;
-    this.minPitch = -Math.PI / 2 + 0.01;
+    this.minPitch = 0.04;
     this.maxPitch = Math.PI / 2 - 0.01;
 
     // Tune feel here: larger smoothTime = more glide.
