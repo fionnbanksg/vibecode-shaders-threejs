@@ -13,7 +13,7 @@ const float STEEPNESS_DECAY  = 0.78;
 uniform float uSteepness;             // keep < 1.0 or the surface folds over itself   // keep < 1.0 or the surface folds over itself
 const float WIND_ANGLE       = 0.43;   // radians
 const float WIND_SPREAD      = 1.6;   // radians; 0 = all waves aligned
-
+varying float vHeight;
 float hash11(float n) {
   return fract(sin(n * 127.1) * 43758.5453);
 }
@@ -56,6 +56,7 @@ void main() {
   }
 
   vec3 displaced = position + offset;
+  vHeight = offset.y / max(uSteepness, 0.05);   // signed, roughly -1..1; crests are positive
   vNormal = normalize(cross(binormal, tangent));
 
   vec4 world = modelMatrix * vec4(displaced, 1.0);

@@ -12,8 +12,9 @@ export const uniforms = {
   uResolution: { value: new THREE.Vector2(1, 1) },
   uSteepness: { value: 0.7 },
   uSunDir: { value: new THREE.Vector3(0.4, 0.35, 0.3).normalize() },
-  // Hex colours are treated as sRGB and converted to linear by three automatically.
   uWaterColor: { value: new THREE.Color(0x0a4a5c) },
+  uScatterColor: { value: new THREE.Color(0x2fd0b8) },
+  uSssStrength: { value: 3.0 },
 };
 
 // Keep the current source strings so hot reload can rebuild either material.
