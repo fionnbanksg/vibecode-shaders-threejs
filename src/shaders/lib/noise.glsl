@@ -38,8 +38,9 @@ const float RIPPLE_FADE_END     = 220.0;  // ...and where it is gone
 const mat2 OCTAVE_ROT = mat2(0.8, -0.6, 0.6, 0.8);   // a rotation (0.8^2 + 0.6^2 = 1)
 
 // Returns the slope (dh/dx, dh/dz) of the ripple height field at world position p.
-vec2 rippleSlope(vec2 p, float dist, float time) {
+vec2 rippleSlope(vec2 p, float dist, float time, out float lostVar) {
   vec2 slope = vec2(0.0);
+  lostVar = 0.0;
   float freq = RIPPLE_BASE_FREQ;
   float amp = 1.0;
   mat2 rot = mat2(1.0);
@@ -48,6 +49,9 @@ vec2 rippleSlope(vec2 p, float dist, float time) {
     float wavelength = 1.0 / freq;
     float fade = 1.0 - smoothstep(RIPPLE_FADE_START * wavelength,
                                   RIPPLE_FADE_END * wavelength, dist);
+
+    float octaveSlope = amp * freq * RIPPLE_SLOPE_SCALE;           // slope amplitude of this octave
+    lostVar += 0.25 * octaveSlope * octaveSlope * (1.0 - fade * fade);
 
     // Each octave drifts in its own direction so the pattern never visibly slides as one sheet.
     float a = 0.3 + float(i) * 1.3;
