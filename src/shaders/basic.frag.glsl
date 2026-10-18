@@ -4,6 +4,11 @@ uniform vec3 uWaterColor;
 uniform vec3 uScatterColor;
 uniform float uSssStrength;
 uniform float uRippleStrength;
+uniform float uFoamThreshold;
+uniform float uFoamStrength;
+varying float vJacobian;
+
+
 
 varying vec3 vNormal;
 varying vec3 vWorldPos;
@@ -55,9 +60,33 @@ void main() {
     float shininess = max(2.0 / m2 - 2.0, 4.0);   // Beckmann roughness to Blinn-Phong exponent
   float spec = pow(max(dot(n, h), 0.0), shininess) * (shininess + 8.0) / 25.1327;
   vec3 sunSpec = vec3(1.0, 0.9, 0.75) * spec * fresnel * nDotL;
+  // --- Foam: Jacobian mask, eroded by multi-scale noise so it breaks into lace ---
+  float foamMask = 1.0 - smoothstep(uFoamThreshold - 0.3, uFoamThreshold, vJacobian);
+    vec2 fq = (vWorldPos.xz + vec2(0.25, -0.15) * uTime) * 1.5;
+  float foamTex = 0.0;
+  float fa = 0.5;
+  for (int i = 0; i < 4; i++) {
+    foamTex += fa * noised(fq).x;
+    fq = OCTAVE_ROT * fq * 2.3;
+    fa *= 0.5;
+  }
+  foamTex /= 0.9375;   // divide by the sum of the amplitudes
+  float foam = smoothstep(0.45, 0.6, foamMask * 1.1 + (foamTex - 0.5) * 0.9);
+  float foamFade = 1.0 - smoothstep(80.0, 250.0, dist);   // fine noise aliases far away
+  foam *= foamFade * uFoamStrength;
 
-  vec3 col = mix(body, reflection, fresnel) + sunSpec;
+  // --- Spray (fake): sparse bright specks just outside the foam, blown downwind ---
+  float halo = 1.0 - smoothstep(uFoamThreshold, uFoamThreshold + 0.35, vJacobian);
+  float speck = smoothstep(0.78, 0.88, noised(vWorldPos.xz * 16.0 - vec2(0.955, 0.296) * uTime * 40.0).x);
+  float spray = halo * speck * (1.0 - foam) * (1.0 - smoothstep(40.0, 120.0, dist)) * uFoamStrength;
 
+  // Foam is diffuse: sky ambient plus sun, instead of mirror reflection.
+  vec3 foamCol = (vec3(0.45, 0.55, 0.65) + vec3(1.0, 0.92, 0.8) * nDotL * 0.9) * daylight;
+  vec3 col = mix(body, reflection, fresnel);
+  col = mix(col, foamCol, foam);
+  col += sunSpec * (1.0 - foam);          // foam is rough, so it hides the glint
+  col = mix(col, foamCol, spray * 0.8);
+  col = mix(col, vec3(0.9, 0.93, 0.95) * daylight, foam);
   // --- Horizon haze: blend into the sky so the far edge disappears --
   float fog = 1.0 - exp(-pow(dist * 0.003, 1.5));
   fog = max(fog, smoothstep(250.0, 420.0, dist));

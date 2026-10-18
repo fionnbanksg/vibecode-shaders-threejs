@@ -17,6 +17,8 @@ export const uniforms = {
   uScatterColor: { value: new THREE.Color(0x2fd0b8) },
   uSssStrength: { value: 3.0 },
   uRippleStrength: { value: 1.0 },
+  uFoamThreshold: { value: 0.5 },
+  uFoamStrength: { value: 1.0 },
 };
 
 // Current source strings, kept so hot reload can rebuild either material.
