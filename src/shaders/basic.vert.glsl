@@ -1,5 +1,7 @@
 uniform float uTime;
 uniform float uSteepness;
+uniform float uSimBlend;
+uniform float uSwashThickness;
 
 varying vec3 vNormal;
 varying vec3 vWorldPos;
@@ -88,6 +90,21 @@ void main() {
   }
 
   // Area scale of the horizontal displacement: 1 = flat, <1 = compressed, <=0 = folded.
+  // Wave sim: it replaces the deep-water swell where the water is shallow.
+  // residual = sim height minus that swell, so in deep water it is zero and nothing changes.
+  float simStep = uSimWindow.z / float(textureSize(uSimState, 0).x);
+  float residual = sampleWaveSim(p).z;
+  float residualDx = (sampleWaveSim(p + vec2(simStep, 0.0)).z - sampleWaveSim(p - vec2(simStep, 0.0)).z) / (2.0 * simStep);
+  float residualDz = (sampleWaveSim(p + vec2(0.0, simStep)).z - sampleWaveSim(p - vec2(0.0, simStep)).z) / (2.0 * simStep);
+  offset.y += residual * uSimBlend;
+  tangent.y += residualDx * uSimBlend;       // slope of the added height, so the lighting follows it
+  binormal.y += residualDz * uSimBlend;
+    // Swash: up the beach the water becomes a thin sheet that hugs the sand,
+  // instead of a thick horizontal wedge cut by the slope.
+  float ground = terrainHeightSmooth(p + offset.xz);           // terrain height under this vertex
+  float hug = smoothstep(-0.3, 0.3, ground);                   // 0 in the water, 1 a little way up the beach
+  float sheet = min(offset.y, ground + uSwashThickness);       // the wave surface, but no more than a film above the sand
+  offset.y = mix(offset.y, sheet, hug);
   vJacobian = tangent.x * binormal.z - binormal.x * tangent.z;
   vLostVar = lostVar;
   vec3 displaced = position + offset;

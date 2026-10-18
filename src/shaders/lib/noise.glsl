@@ -67,3 +67,15 @@ vec2 rippleSlope(vec2 p, float dist, float time, out float lostVar) {
   }
   return slope * RIPPLE_SLOPE_SCALE;
 }
+
+// Four octaves of value noise, roughly 0..1. Detail goes down to a few centimetres.
+float foamFbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noised(p).x;
+    p = OCTAVE_ROT * p * 2.3;
+    a *= 0.5;
+  }
+  return v / 0.9375;   // divide by the sum of the amplitudes
+}

@@ -14,6 +14,25 @@ varying vec3 vNormal;
 varying vec3 vWorldPos;
 varying float vHeight;
 varying float vLostVar;
+
+uniform sampler2D uSceneColor;
+uniform sampler2D uSceneDepth;
+uniform vec2 uResolution;
+uniform float uCameraNear;
+uniform float uCameraFar;
+uniform float uDebug;
+uniform vec3 uAbsorption;
+uniform float uRefraction;
+uniform float uShoreWidth;
+
+
+
+// Depth-buffer value (0..1) to distance along the view axis, in metres.
+float sceneViewZ(float d) {
+  return (uCameraNear * uCameraFar) / (uCameraFar - d * (uCameraFar - uCameraNear));
+}
+
+
 void main() {
   vec3 toEye = cameraPosition - vWorldPos;
   float dist = length(toEye);
@@ -82,18 +101,73 @@ void main() {
 
   // Foam is diffuse: sky ambient plus sun, instead of mirror reflection.
   vec3 foamCol = (vec3(0.45, 0.55, 0.65) + vec3(1.0, 0.92, 0.8) * nDotL * 0.9) * daylight;
-  vec3 col = mix(body, reflection, fresnel);
-  col = mix(col, foamCol, foam);
-  col += sunSpec * (1.0 - foam);          // foam is rough, so it hides the glint
-  col = mix(col, foamCol, spray * 0.8);
-  col = mix(col, vec3(0.9, 0.93, 0.95) * daylight, foam);
-  // --- Horizon haze: blend into the sky so the far edge disappears --
-  float fog = 1.0 - exp(-pow(dist * 0.003, 1.5));
-  fog = max(fog, smoothstep(250.0, 420.0, dist));
-  vec3 fogColor = skyGradient(normalize(vec3(-v.x, 0.0, -v.z)), uSunDir);
-  col = mix(col, fogColor, fog);
+    // --- Whatever the host scene drew under the water ---------------------
+  // --- Whatever the host scene drew under the water ---------------------
+  vec2 screenUv = gl_FragCoord.xy / uResolution;
+  float waterZ = max(-(viewMatrix * vec4(vWorldPos, 1.0)).z, 0.001);   // distance along the view axis
 
+  // Refraction: shift the lookup by the surface tilt, measured against flat water, in view space.
+  vec2 tilt = (viewMatrix * vec4(n, 0.0)).xy - (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xy;
+  float firstDepth = texture2D(uSceneDepth, screenUv).x;
+  float firstThickness = (firstDepth < 0.9999)
+      ? max(sceneViewZ(firstDepth) - waterZ, 0.0) * dist / waterZ
+      : 1000.0;
+  vec2 refrUv = clamp(screenUv + tilt * (uRefraction * min(firstThickness, 3.0) / waterZ), 0.001, 0.999);
+
+  // A refracted lookup that lands on something in front of the water (beach, rock) would leak: reject it.
+  float refrDepth = texture2D(uSceneDepth, refrUv).x;
+  bool refrOk = refrDepth >= 0.9999 || sceneViewZ(refrDepth) > waterZ;
+  vec2 sceneUv = refrOk ? refrUv : screenUv;
+  float sceneDepthRaw = refrOk ? refrDepth : firstDepth;
+
+  bool hasScene = sceneDepthRaw < 0.9999;                         // 1.0 = nothing there
+  float thickness = hasScene
+      ? max(sceneViewZ(sceneDepthRaw) - waterZ, 0.0) * dist / waterZ   // metres of water along the eye ray
+      : 1000.0;                                                   // nothing below: bottomless
+  vec3 sceneCol = hasScene ? texture2D(uSceneColor, sceneUv).rgb : body;
+
+  // Beer-Lambert: each channel is absorbed at its own rate, red first.
+  vec3 transmit = exp(-uAbsorption * thickness);
+  vec3 under = mix(body, sceneCol, transmit);
+
+  // Shoreline foam: where the water gets thin, ragged with the same noise as the crest foam.
+  float shoreMask = 1.0 - smoothstep(0.0, uShoreWidth, thickness);
+  float shoreFoam = smoothstep(0.45, 0.6, shoreMask * 1.1 + (foamTex - 0.5) * 0.9) * foamFade * uFoamStrength;
+  foam = max(foam, shoreFoam);
+
+  vec3 col = mix(under, reflection, fresnel);
+  col = mix(sceneCol, col, smoothstep(0.0, 0.1, thickness));      // water vanishes cleanly at the beach
+
+
+  // --- Debug views (uDebug). One if/else chain, so the order doesn't matter. ---
+  if (uDebug > 0.5) {
+    if (uDebug < 1.5) {
+      col = vec3(1.0 - exp(-thickness * 0.2));                                    // water thickness
+    } else if (uDebug < 2.5) {
+      col = sceneCol;                                                             // captured scene
+    } else if (uDebug < 3.5) {                                                    // terrain height
+      float th = terrainHeight(vWorldPos.xz);
+      float t = clamp((th + 14.0) / 17.0, 0.0, 1.0);                              // demo range: -14 m to +3 m
+      col = mix(vec3(0.0, 0.15, 0.4), vec3(0.85, 0.75, 0.45), t);
+      col = mix(col, vec3(0.0), 0.5 * (1.0 - smoothstep(0.0, 0.06, abs(fract(th + 0.5) - 0.5))));
+      col = mix(col, vec3(1.0, 0.0, 0.0), 1.0 - smoothstep(0.0, 0.15, abs(th)));  // red = shoreline
+    } else if (uDebug < 4.5) {                                                    // sim wave height
+      float e = sampleWaveSim(vWorldPos.xz).x;
+      col = vec3(0.5) + vec3(0.5, 0.1, -0.5) * clamp(e / 1.5, -1.0, 1.0);         // orange crest, blue trough
+    } else {                                                                      // sim minus deep-water swell, x4
+      float r = sampleWaveSim(vWorldPos.xz).z;
+      col = vec3(0.5) + vec3(0.5, 0.1, -0.5) * clamp(r * 4.0 / 1.5, -1.0, 1.0);
+    }
+  }
+    //col = vec3(fract(terrainHeight(vWorldPos.xz)));   // TEMP: a sawtooth, one band per metre of terrain height                                            // debug: captured scene
   gl_FragColor = vec4(col, 1.0);
+      if (uDebug > 2.5) {   // debug: terrain height. Dark lines every 1 m, red line = rest-level shoreline
+    float th = terrainHeight(vWorldPos.xz);
+    float t = clamp((th + 14.0) / 17.0, 0.0, 1.0);                 // demo range: -14 m (deep) to +3 m (dune top)
+    col = mix(vec3(0.0, 0.15, 0.4), vec3(0.85, 0.75, 0.45), t);
+    col = mix(col, vec3(0.0), 0.5 * (1.0 - smoothstep(0.0, 0.06, abs(fract(th + 0.5) - 0.5))));
+    col = mix(col, vec3(1.0, 0.0, 0.0), 1.0 - smoothstep(0.0, 0.15, abs(th)));
+  }
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

@@ -4,10 +4,12 @@ import waterVert from './shaders/basic.vert.glsl?raw';
 import waterFrag from './shaders/basic.frag.glsl?raw';
 import skyLib from './shaders/lib/sky.glsl?raw';
 import noiseLib from './shaders/lib/noise.glsl?raw';
+import bathyLib from './shaders/lib/bathymetry.glsl?raw';
+import wavesimLib from './shaders/lib/wavesim.glsl?raw';
 import skyVert from './shaders/sky.vert.glsl?raw';
 import skyFrag from './shaders/sky.frag.glsl?raw';
 
-// One uniforms object shared by both materials. A shader ignores uniforms it doesn't declare.
+// One uniforms object shared by every material. A shader ignores uniforms it doesn't declare.
 export const uniforms = {
   uTime: { value: 0 },
   uResolution: { value: new THREE.Vector2(1, 1) },
@@ -19,17 +21,33 @@ export const uniforms = {
   uRippleStrength: { value: 1.0 },
   uFoamThreshold: { value: 0.5 },
   uFoamStrength: { value: 1.0 },
+  uSceneColor: { value: null },     // set by SceneCapture
+  uSceneDepth: { value: null },
+  uCameraNear: { value: 0.5 },
+  uCameraFar: { value: 5000 },
+  uDebug: { value: 0 },
+  uAbsorption: { value: new THREE.Vector3(0.45, 0.12, 0.08) },   // per metre, for red / green / blue
+  uRefraction: { value: 0.3 },
+  uShoreWidth: { value: 0.5 },                                   // metres of water where shore foam shows
+  uBathyDepth: { value: null },                                  // set by Bathymetry
+  uBathyParams: { value: new THREE.Vector4(0, 0, 400, 20) },
+  uBathyRange: { value: new THREE.Vector2(0.1, 60) },
+  uSimState: { value: null },                                    // set by WaveSim
+  uSimWindow: { value: new THREE.Vector4(0, 0, 400, 1) },
+  uSimBlend: { value: 1.0 },                                     // 0 = the old Gerstner ocean, 1 = sim-informed
+  uSwashThickness: { value: 0.04 },   
 };
 
 // Current source strings, kept so hot reload can rebuild either material.
-const src = { waterVert, waterFrag, skyLib, noiseLib, skyVert, skyFrag };
+const src = { waterVert, waterFrag, skyLib, noiseLib, skyVert, skyFrag, bathyLib, wavesimLib };
 
 // Libraries first, then the shader that uses them.
-const waterFragment = () => src.skyLib + '\n' + src.noiseLib + '\n' + src.waterFrag;
+const waterFragment = () => src.skyLib + '\n' + src.bathyLib + '\n' + src.wavesimLib + '\n' + src.noiseLib + '\n' + src.waterFrag;
+const waterVertex = () => src.bathyLib + '\n' + src.wavesimLib + '\n' + src.waterVert;   // vertex shader reads terrain and the sim
 const skyFragment = () => src.skyLib + '\n' + src.skyFrag;
 
 export const material = new THREE.ShaderMaterial({
-  vertexShader: src.waterVert,
+  vertexShader: waterVertex(),
   fragmentShader: waterFragment(),
   uniforms,
   side: THREE.DoubleSide,
@@ -62,7 +80,7 @@ if (import.meta.hot) {
       if (sv) src.skyVert = sv.default;
       if (sf) src.skyFrag = sf.default;
 
-      material.vertexShader = src.waterVert;
+      material.vertexShader = waterVertex();
       material.fragmentShader = waterFragment();
       skyMaterial.vertexShader = src.skyVert;
       skyMaterial.fragmentShader = skyFragment();
