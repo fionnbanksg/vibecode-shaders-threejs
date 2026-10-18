@@ -6,9 +6,13 @@ import { SceneCapture } from './SceneCapture.js';
 import { createDemoTerrain } from './demo/beach.js';   // demo only
 import { Bathymetry } from './Bathymetry.js';
 import { WaveSim } from './WaveSim.js';
-const canvas = document.getElementById('canvas');
+import { SurfaceMemory } from './SurfaceMemory.js';
 
+
+const canvas = document.getElementById('canvas');
+          // foam and wet sand
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const memory = new SurfaceMemory(renderer, uniforms); 
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -72,7 +76,8 @@ renderer.setAnimationLoop((timestamp) => {
   const dt = Math.min(timer.getDelta(), 0.1);
   uniforms.uTime.value = timer.getElapsed();
   controls.update(dt);
-    sim.update();
+  sim.update();
+  memory.update();
   capture.render(renderer, scene, camera, [ocean, sky]);   // what is under the water
   renderer.render(scene, camera);
 });

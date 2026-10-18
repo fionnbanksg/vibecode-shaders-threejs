@@ -6,6 +6,7 @@ import skyLib from './shaders/lib/sky.glsl?raw';
 import noiseLib from './shaders/lib/noise.glsl?raw';
 import bathyLib from './shaders/lib/bathymetry.glsl?raw';
 import wavesimLib from './shaders/lib/wavesim.glsl?raw';
+import memoryLib from './shaders/lib/memory.glsl?raw';
 import skyVert from './shaders/sky.vert.glsl?raw';
 import skyFrag from './shaders/sky.frag.glsl?raw';
 
@@ -35,15 +36,19 @@ export const uniforms = {
   uSimState: { value: null },                                    // set by WaveSim
   uSimWindow: { value: new THREE.Vector4(0, 0, 400, 1) },
   uSimBlend: { value: 1.0 },                                     // 0 = the old Gerstner ocean, 1 = sim-informed
-  uSwashThickness: { value: 0.04 },   
+  uSurfaceMemory: { value: null },                               // set by SurfaceMemory
+  uMemWindow: { value: new THREE.Vector4(0, 0, 400, 0) },
+  uFoamLife: { value: 6.0 },                                     // seconds for foam to fade
+  uWetLife: { value: 30.0 },                                     // seconds for wet sand to dry
 };
 
 // Current source strings, kept so hot reload can rebuild either material.
-const src = { waterVert, waterFrag, skyLib, noiseLib, skyVert, skyFrag, bathyLib, wavesimLib };
+const src = { waterVert, waterFrag, skyLib, noiseLib, skyVert, skyFrag, bathyLib, wavesimLib, memoryLib };
 
 // Libraries first, then the shader that uses them.
-const waterFragment = () => src.skyLib + '\n' + src.bathyLib + '\n' + src.wavesimLib + '\n' + src.noiseLib + '\n' + src.waterFrag;
-const waterVertex = () => src.bathyLib + '\n' + src.wavesimLib + '\n' + src.waterVert;   // vertex shader reads terrain and the sim
+const waterFragment = () =>
+  src.skyLib + '\n' + src.bathyLib + '\n' + src.wavesimLib + '\n' + src.memoryLib + '\n' + src.noiseLib + '\n' + src.waterFrag;
+const waterVertex = () => src.wavesimLib + '\n' + src.waterVert;   // the vertex shader reads the sim too
 const skyFragment = () => src.skyLib + '\n' + src.skyFrag;
 
 export const material = new THREE.ShaderMaterial({

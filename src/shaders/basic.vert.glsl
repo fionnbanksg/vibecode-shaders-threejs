@@ -1,13 +1,13 @@
 uniform float uTime;
 uniform float uSteepness;
 uniform float uSimBlend;
-uniform float uSwashThickness;
 
 varying vec3 vNormal;
 varying vec3 vWorldPos;
 varying float vHeight;
 varying float vJacobian;
 varying float vLostVar;
+varying float vBreak;
 
 const float GRAVITY = 9.81;
 const float TAU = 6.28318530718;
@@ -56,7 +56,8 @@ void main() {
   vec3 tangent  = vec3(1.0, 0.0, 0.0);
   vec3 binormal = vec3(0.0, 0.0, 1.0);
   float maxHeight = 0.0;   // tallest the sea could be here if every wave peaked at once
-  float lostVar = 0.0;   // slope variance thrown away by the distance fade
+  float lostVar = 0.0;     // slope variance thrown away by the distance fade
+
   // Pass 1: add up the random weights so the final steepnesses sum to exactly uSteepness.
   float totalWeight = 0.0;
   for (int i = 0; i < WAVE_COUNT; i++) {
@@ -89,7 +90,6 @@ void main() {
     gerstner(p, dir, wavelength, steepness, phase0, offset, tangent, binormal);
   }
 
-  // Area scale of the horizontal displacement: 1 = flat, <1 = compressed, <=0 = folded.
   // Wave sim: it replaces the deep-water swell where the water is shallow.
   // residual = sim height minus that swell, so in deep water it is zero and nothing changes.
   float simStep = uSimWindow.z / float(textureSize(uSimState, 0).x);
@@ -99,12 +99,9 @@ void main() {
   offset.y += residual * uSimBlend;
   tangent.y += residualDx * uSimBlend;       // slope of the added height, so the lighting follows it
   binormal.y += residualDz * uSimBlend;
-    // Swash: up the beach the water becomes a thin sheet that hugs the sand,
-  // instead of a thick horizontal wedge cut by the slope.
-  float ground = terrainHeightSmooth(p + offset.xz);           // terrain height under this vertex
-  float hug = smoothstep(-0.3, 0.3, ground);                   // 0 in the water, 1 a little way up the beach
-  float sheet = min(offset.y, ground + uSwashThickness);       // the wave surface, but no more than a film above the sand
-  offset.y = mix(offset.y, sheet, hug);
+  vBreak = sampleWaveSim(p).w * uSimBlend;   // how hard the waves are breaking here (0..1)
+
+  // Area scale of the horizontal displacement: 1 = flat, <1 = compressed, <=0 = folded.
   vJacobian = tangent.x * binormal.z - binormal.x * tangent.z;
   vLostVar = lostVar;
   vec3 displaced = position + offset;

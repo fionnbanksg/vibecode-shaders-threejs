@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import memoryLib from '../shaders/lib/memory.glsl?raw';
 
 // DEMO ONLY. Test scenery for the ocean shaders. Nothing in the ocean code imports this,
-// so delete the file (and its two lines in main.js) when you move to your own game scene.
+// so delete the file (and its lines in main.js) when you move to your own game scene.
 //
 // heightAt(x, z) returns the terrain height in metres; 0 is the water's rest level.
 export function demoHeight(x, z) {
@@ -11,7 +12,7 @@ export function demoHeight(x, z) {
   return base + dunes * t;
 }
 
-export function createDemoTerrain({ size = 400, segments = 400, heightAt = demoHeight } = {}) {
+export function createDemoTerrain({ size = 400, segments = 400, heightAt = demoHeight, uniforms = null } = {}) {
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   geometry.rotateX(-Math.PI / 2);
 
@@ -30,5 +31,27 @@ export function createDemoTerrain({ size = 400, segments = 400, heightAt = demoH
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
 
-  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  const material = new THREE.MeshBasicMaterial({ vertexColors: true });
+
+  // Wet sand: darken where the ocean's surface memory says water has been. Your own terrain material
+  // needs the same few lines: include memory.glsl and multiply the albedo by the wetness.
+  if (uniforms) {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uSurfaceMemory = uniforms.uSurfaceMemory;
+      shader.uniforms.uMemWindow = uniforms.uMemWindow;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWetPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWetPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWetPos;\n' + memoryLib)
+        .replace(
+          '#include <color_fragment>',
+          '#include <color_fragment>\n' +
+            '  float wetAbove = sampleSurfaceMemory(vWetPos.xz).y * smoothstep(-0.1, 0.1, vWetPos.y);\n' +
+            '  diffuseColor.rgb *= mix(1.0, 0.55, wetAbove);'
+        );
+    };
+  }
+
+  return new THREE.Mesh(geometry, material);
 }
